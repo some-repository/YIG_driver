@@ -30,7 +30,6 @@ void RCC_config (void);
 void MCO_config (void);
 void ADC_config (void);
 void GPIO_config (void);
-void UART_config (void);
 void SysTick_config (void);
 void parse_packet (uint8_t *buf);
 
@@ -112,26 +111,6 @@ void ADC_config (void)
     LL_ADC_INJ_SetSequencerLength (ADC1, LL_ADC_INJ_SEQ_SCAN_ENABLE_2RANKS); // two injected channels are in use
     LL_ADC_INJ_SetSequencerRanks (ADC1, LL_ADC_INJ_RANK_1, LL_ADC_CHANNEL_1); // channel 1 (PA1)
     LL_ADC_INJ_SetSequencerRanks (ADC1, LL_ADC_INJ_RANK_2, LL_ADC_CHANNEL_2); // channel 2 (PA2)
-}
-
-void UART_config (void)
-{
-    LL_AHB1_GRP1_EnableClock (LL_AHB1_GRP1_PERIPH_GPIOA);
-    LL_APB2_GRP1_EnableClock (LL_APB2_GRP1_PERIPH_USART1);
-    // PA15 (TX1)
-    LL_GPIO_SetPinMode (GPIOA, LL_GPIO_PIN_15, LL_GPIO_MODE_ALTERNATE);
-    LL_GPIO_SetPinSpeed (GPIOA, LL_GPIO_PIN_15, LL_GPIO_SPEED_FREQ_VERY_HIGH);
-    LL_GPIO_SetAFPin_8_15 (GPIOA, LL_GPIO_PIN_15, LL_GPIO_AF_7);
-
-    LL_USART_SetDataWidth (USART1, LL_USART_DATAWIDTH_8B);
-    LL_USART_SetParity (USART1, LL_USART_PARITY_NONE);
-    LL_USART_SetOverSampling (USART1, LL_USART_OVERSAMPLING_16);
-    LL_USART_SetStopBitsLength (USART1, LL_USART_STOPBITS_1);
-    LL_USART_SetBaudRate (USART1, 96000000, LL_USART_OVERSAMPLING_16, UART_SPEED);
-    LL_USART_SetTransferDirection (USART1, LL_USART_DIRECTION_TX);
-    LL_USART_SetHWFlowCtrl (USART1, LL_USART_HWCONTROL_NONE);
-    LL_USART_ConfigAsyncMode (USART1);
-    LL_USART_Enable (USART1);
 }
 
 void SysTick_config (void)
@@ -249,7 +228,7 @@ int main (void)
     GPIO_config ();
     LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_9); // turn off analog part power
     RCC_config ();
-    UART_config ();
+    UART_config (96000000, 115200); // peripheral clock frequency, baudrate
     print ("Print test\n");
     
     FLASH_Unlock (); // Unlock the Flash Program Erase controller
