@@ -1,6 +1,6 @@
 #include "print.h"
 
-void UART_config (size_t peripheral_clock, size_t UART_baudrate)
+void UART_config (uint32_t peripheral_clock, uint32_t UART_baudrate)
 {
     LL_AHB1_GRP1_EnableClock (LL_AHB1_GRP1_PERIPH_GPIOA);
     LL_APB2_GRP1_EnableClock (LL_APB2_GRP1_PERIPH_USART1);

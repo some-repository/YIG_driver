@@ -12,12 +12,14 @@
 #include "stm32f4xx_flash.h"
 #include <stddef.h> 
 #include <stdlib.h> // for utoa
-#include "print.h"
+#include "snprintf.h" // for printing floats
+#include <math.h> // for fabsf
+#include "print.h" // print via UART
 #include "usb.h"
 #include "spi.h"
 #include "eeprom.h"
 
-char utoa_buf [16] = {0};
+char str_buf [64] = {0};
 const uint8_t initial_delay = 15;
 uint8_t enable_output = 0; // logic variable, responsible for analog part power
 uint8_t ready = 0; // logic variable which is setted with delay after turn on
@@ -31,7 +33,7 @@ void MCO_config (void);
 void ADC_config (void);
 void GPIO_config (void);
 void SysTick_config (void);
-void parse_packet (uint8_t *buf);
+uint8_t verify_current_value (uint16_t ADC_value, uint16_t DAC_value);
 
 void GPIO_config (void)
 {
@@ -113,6 +115,24 @@ void ADC_config (void)
     LL_ADC_INJ_SetSequencerRanks (ADC1, LL_ADC_INJ_RANK_2, LL_ADC_CHANNEL_2); // channel 2 (PA2)
 }
 
+uint8_t verify_current_value (uint16_t ADC_value, uint16_t DAC_value)
+{
+    float threshold = 2;
+    // coefficient is used to convert given DAC value to expected ADC value
+    const float coefficient = (2.5F / 65535) * (4095 / 3.3F); // 16 bit DAC with Vref=2.5V, 12 bit ADC with Vref=3.3V
+    float difference = ADC_value - (DAC_value * coefficient);
+    snprintf (str_buf, sizeof (str_buf), "coefficient = %f, difference = %f\n", coefficient, difference);
+    print (str_buf);
+    if (fabsf (difference) < threshold)
+    {
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
 void SysTick_config (void)
 {
     const uint32_t ticks_per_second = 100;
@@ -147,10 +167,6 @@ void SysTick_Handler (void)
             ready = 1;
             LL_ADC_INJ_StartConversionSWStart (ADC1); // start AD conversion
         }
-
-        /*print ("SysTick interrupt, initial_counter = ");
-        print (utoa (initial_counter, utoa_buf, 10));
-        print ("\n");*/
     }
     else // startup period ended
     {      
@@ -162,7 +178,7 @@ void SysTick_Handler (void)
         {
             debouncing_counter = 10; // load initial value
         }
-        if ((PB8 != 0) && (debouncing_counter > 0)) // enable button released recently
+        if ((PB8 != 0) && (debouncing_counter > 0)) // enable button has been released recently
         {
             debouncing_counter--;
 
@@ -187,37 +203,66 @@ void SysTick_Handler (void)
             print ("DAC values updated\n");
         }
 
-        if (enable_output == 1)
-        {
-            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_9); // turn on analog part power
-        }
-        else
-        {
-            LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_9); // turn off analog part power
-        }
-
         while (LL_ADC_IsActiveFlag_JEOS (ADC1) == 0);
         uint16_t ADC_value_1 = LL_ADC_INJ_ReadConversionData12 (ADC1, LL_ADC_INJ_RANK_1);
         uint16_t ADC_value_2 = LL_ADC_INJ_ReadConversionData12 (ADC1, LL_ADC_INJ_RANK_2);
         LL_ADC_INJ_StartConversionSWStart (ADC1); // start new AD conversion
 
-        /*print ("ADC_value_1 =");
-        print (utoa (ADC_value_1, utoa_buf, 10));
-        print (", ADC_value_2 =");
-        print (utoa (ADC_value_2, utoa_buf, 10));
-        print ("\n");*/
+        if (enable_output == 1)
+        {
+            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_9); // turn on analog part power
+            // check if measured current values are close to target values
+            uint8_t channel_1_status = verify_current_value (ADC_value_1, DAC_1_value);
+            if (channel_1_status == 1)
+            {
+                LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_15); // output 1 ok LED
+                LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_14); // output 1 fail LED
+            }
+            else
+            {
+                LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_15); // output 1 ok LED
+                LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_14); // output 1 fail LED
+            }
+
+            uint8_t channel_2_status = verify_current_value (ADC_value_2, DAC_2_value);
+            if (channel_2_status == 1)
+            {
+                LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_13); // output 2 ok LED
+                LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_12); // output 2 fail LED
+            }
+            else
+            {
+                LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_13); // output 2 ok LED
+                LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_12); // output 2 fail LED
+            }
+        }
+        else
+        {
+            LL_GPIO_ResetOutputPin (GPIOB, LL_GPIO_PIN_9); // turn off analog part power
+            // turn on all 4 output indication LEDs when output is disabled
+            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_12); // output 2 fail LED
+            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_13); // output 2 ok LED
+            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_14); // output 1 fail LED
+            LL_GPIO_SetOutputPin (GPIOB, LL_GPIO_PIN_15); // output 1 ok LED
+        }
 
         if (feedback_request == 1)
         {
             *((uint16_t *) &bufTX [0]) = ADC_value_1;
             *((uint16_t *) &bufTX [2]) = ADC_value_2;
-            send_ep (1, bufTX, 4); // Send 4 bytes of data to EP1
-            
-            /*print ("bufTX [0] =");
-            print (utoa (*((uint16_t *) &bufTX [0]), utoa_buf, 10));
-            print (", bufTX [2] =");
-            print (utoa (*((uint16_t *) &bufTX [2]), utoa_buf, 10));
-            print ("\n");*/
+
+            uint8_t feedback_status = 0;
+            if (enable_output == 1) // set first bit if the analog part is enabled
+            {
+                feedback_status |= 0b1;
+            }
+            if (PB7) // set second bit if external power supply is available
+            {
+                feedback_status |= 0b10;
+            }
+            *((uint16_t *) &bufTX [4]) = feedback_status;
+
+            send_ep (1, bufTX, 5); // Send response consisting of 5 bytes of data to EP1
             feedback_request = 0;
         }
     }
@@ -236,11 +281,11 @@ int main (void)
     // check existence and read DAC values from EEPROM to corresponding variables
     if (EE_ReadVariable (VirtAddVarTab [0], &DAC_1_value) == 1)
     {
-        DAC_1_value = 0; // set DAC value to 0 if EEPROM variable doesn't exist
+        DAC_1_value = 0; // set DAC 1 value to 0 if the corresponding EEPROM variable doesn't exist
     } 
     if (EE_ReadVariable (VirtAddVarTab [1], &DAC_2_value) == 1)
     {
-        DAC_2_value = 0; // set DAC value to 0 if EEPROM variable doesn't exist
+        DAC_2_value = 0; // set DAC 2 value to 0 if the corresponding EEPROM variable doesn't exist
     }
     DAC_values_modified = 1;
 
@@ -250,9 +295,9 @@ int main (void)
     SysTick_config ();
     
     print ("Initial DAC_1_value = ");
-    print (utoa (DAC_1_value, utoa_buf, 10));
+    print (utoa (DAC_1_value, str_buf, 10));
     print (", initial DAC_2_value = ");
-    print (utoa (DAC_2_value, utoa_buf, 10));
+    print (utoa (DAC_2_value, str_buf, 10));
     print ("\n");
     
     while (1) 

@@ -8,7 +8,7 @@ void parse_packet (uint8_t *buf)
     extern uint16_t DAC_1_value, DAC_2_value; // defined in main.c
     extern uint8_t enable_output; // defined in main.c
     extern uint16_t VirtAddVarTab []; // defined in main.c
-    extern char utoa_buf []; // defined in main.c
+    extern char str_buf []; // defined in main.c
     
     uint8_t header = (uint8_t) buf [0];
     
@@ -40,10 +40,10 @@ void parse_packet (uint8_t *buf)
     
     
     print ("header = ");
-    print (utoa (header, utoa_buf, 2));
+    print (utoa (header, str_buf, 2));
     print (", DAC_1_value = ");
-    print (utoa (DAC_1_value, utoa_buf, 10));
+    print (utoa (DAC_1_value, str_buf, 10));
     print (", DAC_2_value = ");
-    print (utoa (DAC_2_value, utoa_buf, 10));
+    print (utoa (DAC_2_value, str_buf, 10));
     print ("\n");
 }

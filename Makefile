@@ -53,8 +53,8 @@ OPENOCD=openocd
 
 # Compiler options
 
-MCUFLAGS = -mcpu=cortex-m4 -mlittle-endian -mfloat-abi=soft -mthumb \
-           -mno-unaligned-access
+MCUFLAGS = -mcpu=cortex-m4 -mlittle-endian -mfloat-abi=hard -mthumb \
+           -mno-unaligned-access -mfpu=fpv4-sp-d16
 
 DEBUG_OPTIMIZE_FLAGS = -O0 -g3 -ggdb3 -gdwarf-2
 
